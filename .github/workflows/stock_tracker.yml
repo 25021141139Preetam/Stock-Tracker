@@ -26,8 +26,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -U https://github.com/jugaad-coder/jugaad-data/archive/master.zip
-          pip install -r requirements.txt
+          pip install -U -r requirements.txt
 
       - name: Run Stock Tracker Engine
         run: |
