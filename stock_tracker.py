@@ -139,8 +139,41 @@ def fetch_prices_direct(symbol: str, range_: str = "1mo") -> Dict[date, float]:
     return out
 
 
+
+import time
+import random
+try:
+    import pandas as pd
+    from jugaad_data.nse import stock_df
+except ImportError:
+    pass
+
 def fetch_symbol_history(symbol: str) -> Dict[date, float]:
-    """Fetch history using yfinance with fallback to direct HTTP query."""
+    """Fetch history using jugaad-data with fallback to yfinance."""
+    clean_symbol = symbol.replace(".NS", "")
+    max_retries = 3
+    
+    # Attempt jugaad-data first
+    for attempt in range(max_retries):
+        try:
+            from datetime import timedelta
+            to_d = datetime.now().date()
+            from_d = to_d - timedelta(days=30)
+            df = stock_df(symbol=clean_symbol, from_date=from_d, to_date=to_d, series="EQ")
+            if not df.empty:
+                df['DATE'] = pd.to_datetime(df['DATE']) + pd.Timedelta(hours=5, minutes=30)
+                prices = {}
+                for idx, row in df.iterrows():
+                    d = row['DATE'].date()
+                    prices[d] = float(row['CLOSE'])
+                if prices:
+                    return prices
+        except Exception as exc:
+            pass
+        time.sleep(random.uniform(2, 5))
+            
+    logger.warning(f"jugaad-data fetch failed for {symbol}. Trying yfinance fallback...")
+    
     # Attempt yfinance first
     if yf is not None:
         try:
