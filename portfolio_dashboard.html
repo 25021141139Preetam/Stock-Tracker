@@ -1068,6 +1068,142 @@
     }
 
     // Donut Allocation Chart
+    
+    // DYNAMIC UI UPDATE PATCH
+    function updateDashboardUI() {
+        if (!SESSIONS || SESSIONS.length < 2) return;
+        const latest = SESSIONS[SESSIONS.length - 1];
+        const prev = SESSIONS[SESSIONS.length - 2];
+        const initial = SESSIONS[0];
+
+        // Format dates
+        document.getElementById('header-latest-date').textContent = formatDate(latest.date);
+        
+        // 1. Total Portfolio Value
+        document.getElementById('kpi-total-value').textContent = formatINR(latest.total_val);
+        const dayChange = latest.total_val - prev.total_val;
+        const dayChangePct = (dayChange / prev.total_val) * 100;
+        
+        const changePctEl = document.getElementById('kpi-total-change-pct');
+        const changeAbsEl = document.getElementById('kpi-total-change-abs');
+        
+        if (dayChange >= 0) {
+            changePctEl.className = 'pill up';
+            changePctEl.innerHTML = `&#9652; +${dayChangePct.toFixed(2)}%`;
+            changeAbsEl.textContent = `+${formatINR(dayChange)} vs previous session`;
+        } else {
+            changePctEl.className = 'pill down';
+            changePctEl.innerHTML = `&#9662; ${dayChangePct.toFixed(2)}%`;
+            changeAbsEl.textContent = `${formatINR(dayChange)} vs previous session`;
+        }
+        
+        // 2. 1-Day Portfolio Change
+        const oneDayChangeEl = document.getElementById('kpi-1d-change');
+        oneDayChangeEl.textContent = (dayChange >= 0 ? '+' : '') + formatINR(dayChange);
+        oneDayChangeEl.style.color = dayChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        
+        document.getElementById('kpi-prev-session').textContent = `Previous Session: ${formatINR(prev.total_val)}`;
+        
+        // 3. Cumulative Change
+        const cumChange = latest.total_val - initial.total_val;
+        const cumChangePct = (cumChange / initial.total_val) * 100;
+        
+        const cumChangeEl = document.getElementById('kpi-cum-change');
+        cumChangeEl.textContent = (cumChange >= 0 ? '+' : '') + formatINR(cumChange);
+        cumChangeEl.style.color = cumChange >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+        
+        const cumPctEl = document.getElementById('kpi-cum-pct');
+        cumPctEl.className = cumChange >= 0 ? 'pill up' : 'pill down';
+        cumPctEl.textContent = (cumChange >= 0 ? '+' : '') + cumChangePct.toFixed(2) + '%';
+        
+        // Stock Cards
+        const stocks = [
+            { id: 'jsw', val: latest.jsw_val, prevVal: prev.jsw_val, close: latest.jsw_close, prevClose: prev.jsw_close, qty: 152 },
+            { id: 'coal', val: latest.coal_val, prevVal: prev.coal_val, close: latest.coal_close, prevClose: prev.coal_close, qty: 239 },
+            { id: 'eternal', val: latest.eternal_val, prevVal: prev.eternal_val, close: latest.eternal_close, prevClose: prev.eternal_close, qty: 313 }
+        ];
+        
+        let bestGainer = null;
+        let maxPct = -Infinity;
+        let bestGainerAbs = 0;
+        let bestGainerCloseDiff = 0;
+        
+        stocks.forEach(s => {
+            // Price card updates
+            const closeDiff = s.close - s.prevClose;
+            const pct = (closeDiff / s.prevClose) * 100;
+            const valDiff = s.val - s.prevVal;
+            
+            if (pct > maxPct) {
+                maxPct = pct;
+                bestGainer = s.id;
+                bestGainerAbs = valDiff;
+                bestGainerCloseDiff = closeDiff;
+            }
+            
+            // We need to find the specific elements for these cards using innerHTML search if they don't have IDs
+            // But luckily we can just patch it by adding IDs in the python script, or use querySelectors based on DOM structure.
+        });
+        
+        // Since the HTML doesn't have IDs for every stock detail, let's just find them by searching the DOM
+        // Find JSW Steel card
+        const cardJsw = Array.from(document.querySelectorAll('.stock-card')).find(c => c.innerHTML.includes('JSWSTEEL.NS'));
+        if (cardJsw) updateStockCard(cardJsw, stocks[0].close, stocks[0].prevClose, stocks[0].val, stocks[0].prevVal, latest.total_val);
+        
+        const cardCoal = Array.from(document.querySelectorAll('.stock-card')).find(c => c.innerHTML.includes('COALINDIA.NS'));
+        if (cardCoal) updateStockCard(cardCoal, stocks[1].close, stocks[1].prevClose, stocks[1].val, stocks[1].prevVal, latest.total_val);
+        
+        const cardEternal = Array.from(document.querySelectorAll('.stock-card')).find(c => c.innerHTML.includes('ETERNAL.NS'));
+        if (cardEternal) updateStockCard(cardEternal, stocks[2].close, stocks[2].prevClose, stocks[2].val, stocks[2].prevVal, latest.total_val);
+        
+        // Top Gainer Card
+        const gainerNameMap = { 'jsw': 'JSW Steel', 'coal': 'Coal India', 'eternal': 'Eternal' };
+        document.querySelector('.highlight-card h3').textContent = gainerNameMap[bestGainer];
+        
+        const gainerPill = document.querySelector('.highlight-card .pill');
+        gainerPill.className = maxPct >= 0 ? 'pill up' : 'pill down';
+        gainerPill.textContent = (maxPct >= 0 ? '+' : '') + maxPct.toFixed(2) + '%';
+        
+        const gainerText = document.querySelector('.highlight-card .trend-text');
+        gainerText.textContent = `${maxPct >= 0 ? '+' : ''}${formatINR(bestGainerCloseDiff)} / share (Gain: ${maxPct >= 0 ? '+' : ''}${formatINR(bestGainerAbs)})`;
+    }
+    
+    function updateStockCard(card, close, prevClose, val, prevVal, totalVal) {
+        const diff = close - prevClose;
+        const pct = (diff / prevClose) * 100;
+        const valDiff = val - prevVal;
+        
+        const priceEls = card.querySelectorAll('.num-mono');
+        if (priceEls.length >= 2) {
+            priceEls[0].textContent = formatINR(close);
+            priceEls[1].textContent = formatINR(val);
+        }
+        
+        const pill = card.querySelector('.pill');
+        if (pill) {
+            pill.className = pct >= 0 ? 'pill up' : 'pill down';
+            pill.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% (${pct >= 0 ? '+' : ''}${formatINR(diff)})`;
+        }
+        
+        const trendEl = card.querySelector('.trend-text');
+        if (trendEl) {
+            trendEl.textContent = `${valDiff >= 0 ? '+' : ''}${formatINR(valDiff)} 1D`;
+        }
+        
+        const weightEl = card.querySelector('.weight-text');
+        if (weightEl) {
+            weightEl.textContent = ((val / totalVal) * 100).toFixed(1) + '%';
+        }
+        
+        const barFill = card.querySelector('.bar-fill');
+        if (barFill) {
+            barFill.style.width = ((val / totalVal) * 100) + '%';
+        }
+    }
+
+    // Call it before the charts initialize
+    updateDashboardUI();
+    
     const latest = SESSIONS[SESSIONS.length - 1];
     const donutCtx = document.getElementById('donutChart').getContext('2d');
     new Chart(donutCtx, {
